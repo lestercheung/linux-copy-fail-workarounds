@@ -1,0 +1,13 @@
+- name: Workaround Copy Fail - CVE-2026-31431
+  hosts: all
+  become: yes
+  gather_facts: no
+  serial: 100
+  tasks:
+    - name: Update kernel command line options with grubby
+      ansible.builtin.command:
+        cmd: 'grubby --update-kernel=ALL --args="initcall_blacklist=algif_aead_init"'
+    - name: Update grub.cfg because we have BLS disabled
+      ansible.builtin.command:
+        cmd: 'grub2-mkconfig -o /boot/grub2/grub.cfg'
+
