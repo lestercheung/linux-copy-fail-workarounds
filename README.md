@@ -10,7 +10,7 @@ This is a collection of workarounds for the local priviledge escalation bug in t
 
 - **block-af-alg.py** — BCC Python wrapper (easiest to use)
 - **block_af_alg.c** — Standalone eBPF C source (can compile directly)
-- **af_alg_lsm_loader.c** - a C eBPF program loader for deployment without bpftools
+- **lsm_loader.c** - a C eBPF program loader for deployment without bpftools
 - **Makefile** — Automates compilation and installation
 - **QUICK-REFERENCE.md** — For more details
 - **RHEL9-AF-ALG-SETUP.md** — Full setup guide for RHEL9

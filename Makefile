@@ -11,8 +11,14 @@ VMLINUX_BTF ?= /sys/kernel/btf/vmlinux
 SRC_DIR := .
 OBJ_DIR := obj
 BPF_OBJ := $(OBJ_DIR)/block_af_alg.o
-LOADER_BIN := $(OBJ_DIR)/af_alg_lsm_loader
+LOADER_BIN := $(OBJ_DIR)/lsm_loader
 INSTALL_DIR := /opt/copy-fail-blocker
+RPM_NAME ?= copy-fail-blocker
+RPM_VERSION ?= 0.1.0
+RPMBUILD_TOP ?= $(HOME)/rpmbuild
+RPM_SPEC := copy-fail-blocker.spec
+RPM_SERVICE := block-af-alg.service
+RPM_TARBALL := $(RPMBUILD_TOP)/SOURCES/$(RPM_NAME)-$(RPM_VERSION).tar.gz
 
 # Flags
 INCLUDES := -I/usr/include/bpf
@@ -20,7 +26,7 @@ CLANG_BPF_SYS_INCLUDES = $(shell clang -print-resource-dir)/include
 LOADER_CFLAGS := -O2 -Wall -Wextra
 LOADER_LDLIBS := -lbpf -lelf -lz
 
-.PHONY: all clean install uninstall test help check-tools vmlinux loader run-loader
+.PHONY: all clean install uninstall test help check-tools vmlinux loader run-loader rpm-setup rpm-sources rpm-build rpm-install
 
 all: $(BPF_OBJ) loader
 
@@ -40,9 +46,9 @@ $(BPF_OBJ): $(SRC_DIR)/block_af_alg.c $(OBJ_DIR)
 # Build libbpf userspace loader (no bpftool needed at runtime)
 loader: $(LOADER_BIN)
 
-$(LOADER_BIN): $(SRC_DIR)/af_alg_lsm_loader.c $(OBJ_DIR)
+$(LOADER_BIN): $(SRC_DIR)/lsm_loader.c $(OBJ_DIR)
 	@echo "[*] Compiling libbpf loader..."
-	$(CC) $(LOADER_CFLAGS) $(SRC_DIR)/af_alg_lsm_loader.c -o $@ $(LOADER_LDLIBS)
+	$(CC) $(LOADER_CFLAGS) $(SRC_DIR)/lsm_loader.c -o $@ $(LOADER_LDLIBS)
 	@echo "[+] Compiled loader: $@"
 
 run-loader: $(BPF_OBJ) loader
@@ -87,9 +93,9 @@ except OSError as e:\
 install: all
 	@echo "[*] Installing as systemd service..."
 	sudo mkdir -p $(INSTALL_DIR)
-	sudo cp $(LOADER_BIN) $(INSTALL_DIR)/af_alg_lsm_loader
+	sudo cp $(LOADER_BIN) $(INSTALL_DIR)/lsm_loader
 	sudo cp $(BPF_OBJ) $(INSTALL_DIR)/block_af_alg.o
-	sudo chmod 755 $(INSTALL_DIR)/af_alg_lsm_loader
+	sudo chmod 755 $(INSTALL_DIR)/lsm_loader
 	sudo chmod 644 $(INSTALL_DIR)/block_af_alg.o
 	@printf '%s\n' \
 		'[Unit]' \
@@ -99,7 +105,7 @@ install: all
 		'' \
 		'[Service]' \
 		'Type=simple' \
-		'ExecStart=/opt/copy-fail-blocker/af_alg_lsm_loader /opt/copy-fail-blocker/block_af_alg.o' \
+		'ExecStart=/opt/copy-fail-blocker/lsm_loader /opt/copy-fail-blocker/block_af_alg.o' \
 		'Restart=always' \
 		'RestartSec=5' \
 		'StandardOutput=journal' \
@@ -132,6 +138,35 @@ stats:
 	@echo "[*] AF_ALG blocker statistics:"
 	sudo $(BPFTOOL) map dump name af_alg_stats || echo "Map not loaded"
 
+rpm-setup:
+	@echo "[*] Preparing rpmbuild tree..."
+	@command -v rpmdev-setuptree >/dev/null 2>&1 || { echo "ERROR: rpmdev-setuptree not found (install rpmdevtools)"; exit 1; }
+	rpmdev-setuptree
+	@echo "[+] rpmbuild tree ready at $(RPMBUILD_TOP)"
+
+rpm-sources: rpm-setup
+	@echo "[*] Creating source tarball and staging spec/service..."
+	@test -f $(RPM_SPEC) || { echo "ERROR: Missing $(RPM_SPEC)"; exit 1; }
+	@test -f $(RPM_SERVICE) || { echo "ERROR: Missing $(RPM_SERVICE)"; exit 1; }
+	git archive --format=tar.gz \
+		--prefix=$(RPM_NAME)-$(RPM_VERSION)/ \
+		-o $(RPM_TARBALL) HEAD
+	cp $(RPM_SPEC) $(RPMBUILD_TOP)/SPECS/
+	cp $(RPM_SERVICE) $(RPMBUILD_TOP)/SOURCES/
+	@echo "[+] Staged sources for rpmbuild"
+
+rpm-build: rpm-sources
+	@echo "[*] Building binary RPM..."
+	@command -v rpmbuild >/dev/null 2>&1 || { echo "ERROR: rpmbuild not found (install rpm-build)"; exit 1; }
+	rpmbuild -bb $(RPMBUILD_TOP)/SPECS/$(RPM_SPEC)
+	@echo "[+] Build complete. RPMs:"
+	@ls -1 $(RPMBUILD_TOP)/RPMS/*/$(RPM_NAME)-*.rpm
+
+rpm-install: rpm-build
+	@echo "[*] Installing generated RPM..."
+	sudo dnf install -y $(RPMBUILD_TOP)/RPMS/*/$(RPM_NAME)-*.rpm
+	@echo "[+] Installed. Enable/start with: sudo systemctl enable --now block-af-alg.service"
+
 clean:
 	@echo "[*] Cleaning..."
 	rm -rf $(OBJ_DIR)
@@ -152,5 +187,9 @@ help:
 	@echo "  make uninstall    - Remove systemd service"
 	@echo "  make list         - List loaded eBPF programs"
 	@echo "  make stats        - Show blocker statistics"
+	@echo "  make rpm-setup    - Create rpmbuild tree under ~/rpmbuild"
+	@echo "  make rpm-sources  - Create source tarball + stage spec/service"
+	@echo "  make rpm-build    - Build binary RPM via rpmbuild -bb"
+	@echo "  make rpm-install  - Build then install generated RPM"
 	@echo "  make clean        - Remove built objects"
 	@echo "  make help         - Show this help"

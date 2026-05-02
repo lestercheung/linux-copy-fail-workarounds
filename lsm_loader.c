@@ -42,16 +42,18 @@ static int bump_memlock_rlimit(void)
 
 int main(int argc, char **argv)
 {
-    const char *obj_path = "obj/block_af_alg.o";
+    char *obj_path = NULL;
     struct bpf_object *obj = NULL;
     struct bpf_program *prog;
     struct bpf_link *links[16] = {0};
     int link_count = 0;
     int err;
 
-    if (argc > 1) {
-        obj_path = argv[1];
+    if (argc != 2) { 
+        fprintf(stderr, "Usage: %s [BPF_OBJECT_PATH]\n", argv[0]);
+        return 1;
     }
+    obj_path = argv[1];
 
     libbpf_set_print(libbpf_log_fn);
 

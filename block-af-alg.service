@@ -1,0 +1,17 @@
+[Unit]
+Description=AF_ALG eBPF Socket Blocker (LSM)
+After=network.target
+Documentation=man:socket(2)
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/copy-fail-blocker/lsm_loader /usr/libexec/copy-fail-blocker/block_af_alg.o
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=af-alg-blocker
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_PERFMON
+
+[Install]
+WantedBy=multi-user.target
