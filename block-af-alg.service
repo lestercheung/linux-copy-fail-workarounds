@@ -5,7 +5,7 @@ Documentation=man:socket(2)
 
 [Service]
 Type=simple
-ExecStart=/usr/libexec/copy-fail-blocker/lsm_loader /usr/libexec/copy-fail-blocker/block_af_alg.o
+ExecStart=/usr/libexec/block-af-alg/lsm_loader /usr/libexec/block-af-alg/block_af_alg.o
 Restart=always
 RestartSec=5
 StandardOutput=journal

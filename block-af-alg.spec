@@ -1,4 +1,4 @@
-Name:           copy-fail-blocker
+Name:           block-af-alg
 Version:        0.1.0
 Release:        2%{?dist}
 Summary:        eBPF LSM blocker for AF_ALG sockets (copy-fail workaround)
@@ -25,7 +25,7 @@ BuildRequires:  systemd-rpm-macros
 %{?systemd_requires}
 
 %description
-copy-fail-blocker provides an eBPF LSM program and a userspace loader to
+block-af-alg provides an eBPF LSM program and a userspace loader to
 block AF_ALG socket creation as a workaround for copy-fail style local
 privilege escalation chains.
 
@@ -45,9 +45,9 @@ gcc -O2 -Wall -Wextra \
     -lbpf -lelf -lz
 
 %install
-install -d %{buildroot}%{_libexecdir}/copy-fail-blocker
-install -m 0755 obj/lsm_loader %{buildroot}%{_libexecdir}/copy-fail-blocker/lsm_loader
-install -m 0644 obj/block_af_alg.o %{buildroot}%{_libexecdir}/copy-fail-blocker/block_af_alg.o
+install -d %{buildroot}%{_libexecdir}/block-af-alg
+install -m 0755 obj/lsm_loader %{buildroot}%{_libexecdir}/block-af-alg/lsm_loader
+install -m 0644 obj/block_af_alg.o %{buildroot}%{_libexecdir}/block-af-alg/block_af_alg.o
 
 install -d %{buildroot}%{_unitdir}
 install -m 0644 %{SOURCE1} %{buildroot}%{_unitdir}/block-af-alg.service
@@ -64,8 +64,8 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_unitdir}/block-af-alg.service
 %files
 %license LICENSE
 %doc README.md QUICK-REFERENCE.md RHEL9-AF-ALG-SETUP.md
-%{_libexecdir}/copy-fail-blocker/lsm_loader
-%{_libexecdir}/copy-fail-blocker/block_af_alg.o
+%{_libexecdir}/block-af-alg/lsm_loader
+%{_libexecdir}/block-af-alg/block_af_alg.o
 %{_unitdir}/block-af-alg.service
 
 %changelog

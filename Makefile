@@ -13,10 +13,10 @@ OBJ_DIR := obj
 BPF_OBJ := $(OBJ_DIR)/block_af_alg.o
 LOADER_BIN := $(OBJ_DIR)/lsm_loader
 INSTALL_DIR := /opt/copy-fail-blocker
-RPM_NAME ?= copy-fail-blocker
+RPM_NAME ?= block-af-alg
 RPM_VERSION ?= 0.1.0
 RPMBUILD_TOP ?= $(HOME)/rpmbuild
-RPM_SPEC := copy-fail-blocker.spec
+RPM_SPEC := block-af-alg.spec
 RPM_SERVICE := block-af-alg.service
 RPM_TARBALL := $(RPMBUILD_TOP)/SOURCES/$(RPM_NAME)-$(RPM_VERSION).tar.gz
 
