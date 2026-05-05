@@ -8,12 +8,17 @@ This is a collection of workarounds for the local priviledge escalation bug in t
 
 ## Files Provided
 
-- **block-af-alg.py** — BCC Python wrapper (easiest to use)
-- **block_af_alg.c** — Standalone eBPF C source (can compile directly)
-- **lsm_loader.c** - a C eBPF program loader for deployment without bpftools
-- **Makefile** — Automates compilation and installation
-- **QUICK-REFERENCE.md** — For more details
-- **RHEL9-AF-ALG-SETUP.md** — Full setup guide for RHEL9
+- **Makefile** — Automates compilation and installation. `make rpm-setup rpm-build` will give you an installable RPM on RHEL-like systems.
+- **QUICK-REFERENCE.md** — Quick usage and troubleshooting reference.
+- **RHEL9-AF-ALG-SETUP.md** — Full setup guide for RHEL9.
+- **RPM-BUILD.md** — RPM packaging and build instructions.
+- **block-af-alg.py** — BCC Python wrapper (easiest to use).
+- **block_af_alg.c** — Standalone eBPF C source (can compile directly).
+- **block-af-alg.service** — systemd service unit for loading the workaround on boot.
+- **block-af-alg.spec** — RPM spec file for building the package.
+- **lsm_loader.c** — C eBPF program loader for deployment without bpftools.
+- **copy-fail-repro.py** — Re-formatted PoC script for the copy-fail bug.
+- **copy-fail-workaround.yml** - Ansible playbook for the bootloader workaround (requires a reboot).
 
 ---
 
