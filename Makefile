@@ -5,20 +5,17 @@ CC ?= gcc
 LLC ?= llc
 BPFTOOL ?= bpftool
 KERNEL_VERSION ?= $(shell uname -r)
-VMLINUX_BTF ?= /sys/kernel/btf/vmlinux
 
 # Paths
 SRC_DIR := .
 OBJ_DIR := obj
 BPF_OBJ := $(OBJ_DIR)/block_af_alg.o
 LOADER_BIN := $(OBJ_DIR)/lsm_loader
+UDP_EVENTS_BIN := $(OBJ_DIR)/udp_encap_events
 INSTALL_DIR := /opt/copy-fail-blocker
-RPM_NAME ?= block-af-alg
+RPM_PACKAGES ?= block-af-alg block-udp-encap
 RPM_VERSION ?= 0.1.0
 RPMBUILD_TOP ?= $(HOME)/rpmbuild
-RPM_SPEC := block-af-alg.spec
-RPM_SERVICE := block-af-alg.service
-RPM_TARBALL := $(RPMBUILD_TOP)/SOURCES/$(RPM_NAME)-$(RPM_VERSION).tar.gz
 
 # Flags
 INCLUDES := -I/usr/include/bpf
@@ -26,7 +23,7 @@ CLANG_BPF_SYS_INCLUDES = $(shell clang -print-resource-dir)/include
 LOADER_CFLAGS := -O2 -Wall -Wextra
 LOADER_LDLIBS := -lbpf -lelf -lz
 
-.PHONY: all clean install uninstall test help check-tools vmlinux loader run-loader rpm-setup rpm-sources rpm-build rpm-install
+.PHONY: all clean test help check-tools loader run-loader udp-events rpm-setup rpm-sources rpm-build rpm-install
 
 all: $(BPF_OBJ) loader
 
@@ -54,6 +51,13 @@ $(LOADER_BIN): $(SRC_DIR)/lsm_loader.c $(OBJ_DIR)
 run-loader: $(BPF_OBJ) loader
 	@echo "[*] Running libbpf loader in foreground..."
 	sudo $(LOADER_BIN) $(BPF_OBJ)
+
+udp-events: $(UDP_EVENTS_BIN)
+
+$(UDP_EVENTS_BIN): $(SRC_DIR)/udp_encap_events.c $(OBJ_DIR)
+	@echo "[*] Compiling UDP_ENCAP event monitor..."
+	$(CC) $(LOADER_CFLAGS) $(SRC_DIR)/udp_encap_events.c -o $@ $(LOADER_LDLIBS)
+	@echo "[+] Compiled monitor: $@"
 
 # Verify compilation
 verify: $(BPF_OBJ)
@@ -89,45 +93,6 @@ except PermissionError:\
 except OSError as e:\
  print(f"Socket error (expected): {e}"); sys.exit(0)'
 
-# Install as systemd service
-install: all
-	@echo "[*] Installing as systemd service..."
-	sudo mkdir -p $(INSTALL_DIR)
-	sudo cp $(LOADER_BIN) $(INSTALL_DIR)/lsm_loader
-	sudo cp $(BPF_OBJ) $(INSTALL_DIR)/block_af_alg.o
-	sudo chmod 755 $(INSTALL_DIR)/lsm_loader
-	sudo chmod 644 $(INSTALL_DIR)/block_af_alg.o
-	@printf '%s\n' \
-		'[Unit]' \
-		'Description=AF_ALG eBPF Socket Blocker' \
-		'After=network.target' \
-		'Documentation=man:socket(2)' \
-		'' \
-		'[Service]' \
-		'Type=simple' \
-		'ExecStart=/opt/copy-fail-blocker/lsm_loader /opt/copy-fail-blocker/block_af_alg.o' \
-		'Restart=always' \
-		'RestartSec=5' \
-		'StandardOutput=journal' \
-		'StandardError=journal' \
-		'SyslogIdentifier=af-alg-blocker' \
-		'AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_PERFMON' \
-		'' \
-		'[Install]' \
-		'WantedBy=multi-user.target' | sudo tee /etc/systemd/system/block-af-alg.service > /dev/null
-	@echo "[+] Service installed"
-	@echo "[*] To start: sudo systemctl start block-af-alg"
-	@echo "[*] To enable: sudo systemctl enable block-af-alg"
-
-uninstall:
-	@echo "[*] Uninstalling..."
-	sudo systemctl stop block-af-alg || true
-	sudo systemctl disable block-af-alg || true
-	sudo rm -f /etc/systemd/system/block-af-alg.service
-	sudo rm -rf $(INSTALL_DIR)
-	sudo systemctl daemon-reload
-	@echo "[+] Uninstalled"
-
 # List loaded eBPF programs
 list:
 	@echo "[*] Loaded eBPF programs:"
@@ -145,27 +110,39 @@ rpm-setup:
 	@echo "[+] rpmbuild tree ready at $(RPMBUILD_TOP)"
 
 rpm-sources: rpm-setup
-	@echo "[*] Creating source tarball and staging spec/service..."
-	@test -f $(RPM_SPEC) || { echo "ERROR: Missing $(RPM_SPEC)"; exit 1; }
-	@test -f $(RPM_SERVICE) || { echo "ERROR: Missing $(RPM_SERVICE)"; exit 1; }
-	git archive --format=tar.gz \
-		--prefix=$(RPM_NAME)-$(RPM_VERSION)/ \
-		-o $(RPM_TARBALL) HEAD
-	cp $(RPM_SPEC) $(RPMBUILD_TOP)/SPECS/
-	cp $(RPM_SERVICE) $(RPMBUILD_TOP)/SOURCES/
-	@echo "[+] Staged sources for rpmbuild"
+	@echo "[*] Creating source tarballs and staging spec/service for: $(RPM_PACKAGES)"
+	@for pkg in $(RPM_PACKAGES); do \
+		test -f $$pkg.spec || { echo "ERROR: Missing $$pkg.spec"; exit 1; }; \
+		test -f $$pkg.service || { echo "ERROR: Missing $$pkg.service"; exit 1; }; \
+		{ git ls-files; git ls-files --others --exclude-standard; } | \
+		tar -czf $(RPMBUILD_TOP)/SOURCES/$$pkg-$(RPM_VERSION).tar.gz \
+			--no-recursion \
+			--transform "s,^,$$pkg-$(RPM_VERSION)/," \
+			-T -; \
+		cp $$pkg.spec $(RPMBUILD_TOP)/SPECS/; \
+		cp $$pkg.service $(RPMBUILD_TOP)/SOURCES/; \
+	done
+	@echo "[+] Staged rpmbuild sources for all packages"
 
 rpm-build: rpm-sources
-	@echo "[*] Building binary RPM..."
+	@echo "[*] Building binary RPMs for: $(RPM_PACKAGES)"
 	@command -v rpmbuild >/dev/null 2>&1 || { echo "ERROR: rpmbuild not found (install rpm-build)"; exit 1; }
-	rpmbuild -bb $(RPMBUILD_TOP)/SPECS/$(RPM_SPEC)
+	@for pkg in $(RPM_PACKAGES); do \
+		rpmbuild -bb $(RPMBUILD_TOP)/SPECS/$$pkg.spec || exit 1; \
+	done
 	@echo "[+] Build complete. RPMs:"
-	@ls -1 $(RPMBUILD_TOP)/RPMS/*/$(RPM_NAME)-*.rpm
+	@for pkg in $(RPM_PACKAGES); do \
+		ls -1 $(RPMBUILD_TOP)/RPMS/*/$$pkg-*.rpm; \
+	done
 
 rpm-install: rpm-build
-	@echo "[*] Installing generated RPM..."
-	sudo dnf install -y $(RPMBUILD_TOP)/RPMS/*/$(RPM_NAME)-*.rpm
-	@echo "[+] Installed. Enable/start with: sudo systemctl enable --now block-af-alg.service"
+	@echo "[*] Installing generated RPMs..."
+	@for pkg in $(RPM_PACKAGES); do \
+		sudo dnf install -y $(RPMBUILD_TOP)/RPMS/*/$$pkg-*.rpm || exit 1; \
+	done
+	@echo "[+] Installed. Enable/start with:"
+	@echo "    sudo systemctl enable --now block-af-alg.service"
+	@echo "    sudo systemctl enable --now block-udp-encap.service"
 
 clean:
 	@echo "[*] Cleaning..."
@@ -179,17 +156,16 @@ help:
 	@echo "  make check-tools  - Verify clang/bpftool installed"
 	@echo "  make verify       - Show compiled object details"
 	@echo "  make loader       - Build libbpf userspace loader"
+	@echo "  make udp-events   - Build UDP_ENCAP ringbuf event monitor"
 	@echo "  make run-loader   - Load+attach with libbpf loader (foreground)"
 	@echo "  make load-bcc     - Load via BCC Python script (recommended)"
 	@echo "  make load-direct  - Load directly with bpftool"
 	@echo "  make test         - Test AF_ALG socket blocking"
-	@echo "  make install      - Install as systemd service"
-	@echo "  make uninstall    - Remove systemd service"
 	@echo "  make list         - List loaded eBPF programs"
 	@echo "  make stats        - Show blocker statistics"
 	@echo "  make rpm-setup    - Create rpmbuild tree under ~/rpmbuild"
-	@echo "  make rpm-sources  - Create source tarball + stage spec/service"
-	@echo "  make rpm-build    - Build binary RPM via rpmbuild -bb"
-	@echo "  make rpm-install  - Build then install generated RPM"
+	@echo "  make rpm-sources  - Create source tarballs + stage all spec/service files"
+	@echo "  make rpm-build    - Build binary RPMs for all RPM_PACKAGES"
+	@echo "  make rpm-install  - Build then install all generated RPMs"
 	@echo "  make clean        - Remove built objects"
 	@echo "  make help         - Show this help"

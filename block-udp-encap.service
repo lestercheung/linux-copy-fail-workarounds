@@ -1,0 +1,17 @@
+[Unit]
+Description=UDP_ENCAP eBPF Socket Option Blocker (LSM)
+After=network.target
+Documentation=man:setsockopt(2)
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/block-udp-encap/lsm_loader /usr/libexec/block-udp-encap/block_udp_encap.o
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=udp-encap-blocker
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_PERFMON
+
+[Install]
+WantedBy=multi-user.target
