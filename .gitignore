@@ -53,4 +53,7 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# added by me
 /.DS_Store
+.vagrant/
